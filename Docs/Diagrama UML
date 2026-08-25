@@ -1,0 +1,44 @@
+@startuml digrama 
+class main
+
+class Usuario{
+- nombre : String
+
+}
+class Juego{
+- personaje: Bowser
++IniciarJuego()
++MostrarPantallaInicio()
+}
+
+
+class TamagotchiBowser {
+
+  - nombre : String
+  - vivo : boolean
+  - dormido : boolean
+
+  --
+
+  + nacer() : void
+  + comer() : void
+  + dormir() : void
+  + despertar() : void
+  + morir() : void
+
+}
+
+enum Estado{
+- 0 Huevo
+- 1 EstadoNormal
+- 2 Hambre 
+- 3 Sueño
+}
+
+Juego *-- TamagotchiBowser : tiene un
+Usuario o-- Juego : usa un 
+main o-- Usuario : usa un
+Estado *-- TamagotchiBowser : tiene un
+
+
+@enduml

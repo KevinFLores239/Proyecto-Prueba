@@ -1,0 +1,373 @@
+#pragma once
+
+#include <SFML/Graphics.hpp>
+#include <array>
+
+class Bowser
+{
+public:
+    explicit Bowser(const sf::Vector2f& position)
+    {
+        for (std::size_t index = 0; index < birthTextures_.size(); ++index)
+        {
+            loaded_ = birthTextures_[index].loadFromFile(
+                birthImagePaths_[index]) && loaded_;
+        }
+
+        if (loaded_)
+        {
+            setBirthFrame(0, position);
+        }
+
+        sf::Image normalSheet;
+        normalLoaded_ = normalSheet.loadFromFile(
+            "Images/Estado Normal/Estado Normal.png");
+        if (normalLoaded_)
+        {
+            unsigned int sourceX = 0;
+            for (std::size_t index = 0; index < normalFrames_.size(); ++index)
+            {
+                sf::Image frame;
+                frame.create(normalFrameWidths_[index], frameHeight_, sf::Color::Transparent);
+                frame.copy(normalSheet, 0, 0,
+                           sf::IntRect(sourceX, 0, normalFrameWidths_[index], frameHeight_), true);
+                normalLoaded_ = normalFrames_[index].loadFromImage(frame) && normalLoaded_;
+                sourceX += normalFrameWidths_[index];
+            }
+        }
+
+        sf::Image eatingSheet;
+        eatingLoaded_ = eatingSheet.loadFromFile(
+            "Images/Comiendo/Comiendo.png");
+        if (eatingLoaded_)
+        {
+            unsigned int sourceX = 0;
+            for (std::size_t index = 0; index < eatingFrames_.size(); ++index)
+            {
+                sf::Image frame;
+                frame.create(eatingFrameWidths_[index], eatingFrameHeight_,
+                             sf::Color::Transparent);
+                frame.copy(eatingSheet, 0, 0,
+                           sf::IntRect(sourceX, 0, eatingFrameWidths_[index],
+                                       eatingFrameHeight_), true);
+                eatingLoaded_ = eatingFrames_[index].loadFromImage(frame) &&
+                                eatingLoaded_;
+                sourceX += eatingFrameWidths_[index];
+            }
+        }
+
+        sf::Image sleepingSheet;
+        sleepingLoaded_ = sleepingSheet.loadFromFile(
+            "Images/Dormir/Dormido.png");
+        if (sleepingLoaded_)
+        {
+            unsigned int sourceX = 0;
+            for (std::size_t index = 0; index < sleepingFrames_.size(); ++index)
+            {
+                sf::Image frame;
+                frame.create(sleepingFrameWidths_[index], sleepingFrameHeight_,
+                             sf::Color::Transparent);
+                frame.copy(sleepingSheet, 0, 0,
+                           sf::IntRect(sourceX, 0, sleepingFrameWidths_[index],
+                                       sleepingFrameHeight_), true);
+                sleepingLoaded_ = sleepingFrames_[index].loadFromImage(frame) &&
+                                  sleepingLoaded_;
+                sourceX += sleepingFrameWidths_[index];
+            }
+        }
+
+        sf::Image awakeningSheet;
+        awakeningLoaded_ = awakeningSheet.loadFromFile(
+            "Images/Despertar/Despertar.png");
+        if (awakeningLoaded_)
+        {
+            unsigned int sourceX = 0;
+            for (std::size_t index = 0; index < awakeningFrames_.size(); ++index)
+            {
+                sf::Image frame;
+                frame.create(awakeningFrameWidths_[index], awakeningFrameHeight_,
+                             sf::Color::Transparent);
+                frame.copy(awakeningSheet, 0, 0,
+                           sf::IntRect(sourceX, 0, awakeningFrameWidths_[index],
+                                       awakeningFrameHeight_), true);
+                awakeningLoaded_ = awakeningFrames_[index].loadFromImage(frame) &&
+                                   awakeningLoaded_;
+                sourceX += awakeningFrameWidths_[index];
+            }
+        }
+    }
+
+    bool isLoaded() const
+    {
+        return loaded_;
+    }
+
+    void advanceBirthFrame()
+    {
+        if (!loaded_)
+        {
+            return;
+        }
+
+        if (currentBirthFrame_ < birthTextures_.size() - 1)
+        {
+            ++currentBirthFrame_;
+            setBirthFrame(currentBirthFrame_, sprite_.getPosition());
+        }
+    }
+
+    bool birthIsComplete() const
+    {
+        return currentBirthFrame_ == birthTextures_.size() - 1;
+    }
+
+    bool normalIsLoaded() const
+    {
+        return normalLoaded_;
+    }
+
+    bool eatingIsLoaded() const
+    {
+        return eatingLoaded_;
+    }
+
+    bool sleepingIsLoaded() const
+    {
+        return sleepingLoaded_;
+    }
+
+    bool awakeningIsLoaded() const
+    {
+        return awakeningLoaded_;
+    }
+
+    void startNormalAnimation(const sf::Vector2f& position)
+    {
+        if (!normalLoaded_)
+        {
+            return;
+        }
+
+        currentNormalFrame_ = 0;
+        normalAnimationTime_ = 0.0f;
+        setNormalFrame(0, position);
+    }
+
+    void updateNormalAnimation(float deltaTime)
+    {
+        if (!normalLoaded_)
+        {
+            return;
+        }
+
+        normalAnimationTime_ += deltaTime;
+        if (normalAnimationTime_ < normalFrameTime_)
+        {
+            return;
+        }
+
+        normalAnimationTime_ = 0.0f;
+        currentNormalFrame_ = (currentNormalFrame_ + 1) % normalFrameCount_;
+        setNormalFrame(currentNormalFrame_, sprite_.getPosition());
+    }
+
+    void startEatingAnimation()
+    {
+        if (eatingLoaded_)
+        {
+            currentEatingFrame_ = 0;
+            eatingAnimationTime_ = 0.0f;
+            setEatingFrame(0, sprite_.getPosition());
+        }
+    }
+
+    void updateEatingAnimation(float deltaTime)
+    {
+        if (!eatingLoaded_)
+        {
+            return;
+        }
+
+        eatingAnimationTime_ += deltaTime;
+        if (eatingAnimationTime_ >= eatingFrameTime_)
+        {
+            eatingAnimationTime_ = 0.0f;
+            currentEatingFrame_ = (currentEatingFrame_ + 1) % eatingFrameCount_;
+            setEatingFrame(currentEatingFrame_, sprite_.getPosition());
+        }
+    }
+
+    void startSleepingAnimation()
+    {
+        if (sleepingLoaded_)
+        {
+            currentSleepingFrame_ = 0;
+            sleepingAnimationTime_ = 0.0f;
+            setSleepingFrame(0, sprite_.getPosition());
+        }
+    }
+
+    void updateSleepingAnimation(float deltaTime)
+    {
+        if (!sleepingLoaded_)
+        {
+            return;
+        }
+
+        sleepingAnimationTime_ += deltaTime;
+        if (sleepingAnimationTime_ >= sleepingFrameTime_)
+        {
+            sleepingAnimationTime_ = 0.0f;
+            currentSleepingFrame_ =
+                (currentSleepingFrame_ + 1) % sleepingFrameCount_;
+            setSleepingFrame(currentSleepingFrame_, sprite_.getPosition());
+        }
+    }
+
+    void freezeSleepingAnimation()
+    {
+        if (sleepingLoaded_)
+        {
+            currentSleepingFrame_ = sleepingFrameCount_ - 1;
+            setSleepingFrame(currentSleepingFrame_, sprite_.getPosition());
+        }
+    }
+
+    void startAwakeningAnimation()
+    {
+        if (awakeningLoaded_)
+        {
+            currentAwakeningFrame_ = 0;
+            awakeningAnimationTime_ = 0.0f;
+            setAwakeningFrame(0, sprite_.getPosition());
+        }
+    }
+
+    bool updateAwakeningAnimation(float deltaTime)
+    {
+        if (!awakeningLoaded_)
+        {
+            return true;
+        }
+
+        awakeningAnimationTime_ += deltaTime;
+        if (awakeningAnimationTime_ < awakeningFrameTime_)
+        {
+            return false;
+        }
+
+        awakeningAnimationTime_ = 0.0f;
+        if (currentAwakeningFrame_ < awakeningFrameCount_ - 1)
+        {
+            ++currentAwakeningFrame_;
+            setAwakeningFrame(currentAwakeningFrame_, sprite_.getPosition());
+            return false;
+        }
+
+        return true;
+    }
+
+    void draw(sf::RenderWindow& window) const
+    {
+        if (loaded_)
+        {
+            window.draw(sprite_);
+        }
+    }
+
+private:
+    void setBirthFrame(std::size_t frame, const sf::Vector2f& position)
+    {
+        sprite_.setTexture(birthTextures_[frame], true);
+        sprite_.setScale(0.45f, 0.45f);
+        sprite_.setOrigin(
+            birthTextures_[frame].getSize().x / 2.0f,
+            birthTextures_[frame].getSize().y / 2.0f);
+        sprite_.setPosition(position);
+    }
+
+    void setNormalFrame(std::size_t frame, const sf::Vector2f& position)
+    {
+        sprite_.setTexture(normalFrames_[frame], true);
+        sprite_.setScale(0.45f, 0.45f);
+        sprite_.setOrigin(
+            normalFrameWidths_[frame] / 2.0f, frameHeight_ / 2.0f);
+        sprite_.setPosition(position);
+    }
+
+    void setEatingFrame(std::size_t frame, const sf::Vector2f& position)
+    {
+        sprite_.setTexture(eatingFrames_[frame], true);
+        sprite_.setScale(0.45f, 0.45f);
+        sprite_.setOrigin(
+            eatingFrameWidths_[frame] / 2.0f, eatingFrameHeight_ / 2.0f);
+        sprite_.setPosition(position);
+    }
+
+    void setSleepingFrame(std::size_t frame, const sf::Vector2f& position)
+    {
+        sprite_.setTexture(sleepingFrames_[frame], true);
+        sprite_.setScale(0.32f, 0.32f);
+        sprite_.setOrigin(
+            sleepingFrameWidths_[frame] / 2.0f, sleepingFrameHeight_ / 2.0f);
+        sprite_.setPosition(position);
+    }
+
+    void setAwakeningFrame(std::size_t frame, const sf::Vector2f& position)
+    {
+        sprite_.setTexture(awakeningFrames_[frame], true);
+        sprite_.setScale(0.32f, 0.32f);
+        sprite_.setOrigin(
+            awakeningFrameWidths_[frame] / 2.0f, awakeningFrameHeight_ / 2.0f);
+        sprite_.setPosition(position);
+    }
+
+    static constexpr std::array<const char*, 6> birthImagePaths_ = {
+        "Images/Nacer/Nacer 1.png",
+        "Images/Nacer/Nacer 2.png",
+        "Images/Nacer/Nacer 3.png",
+        "Images/Nacer/Nacer 4.png",
+        "Images/Nacer/Nacer 5.png",
+        "Images/Nacer/Nacer 6.png"};
+    static constexpr int frameHeight_ = 268;
+    static constexpr int normalFrameCount_ = 5;
+    static constexpr float normalFrameTime_ = 0.24f;
+    static constexpr std::array<unsigned int, 5> normalFrameWidths_ = {
+        270, 270, 270, 270, 268};
+    static constexpr int eatingFrameCount_ = 3;
+    static constexpr int eatingFrameHeight_ = 262;
+    static constexpr float eatingFrameTime_ = 0.28f;
+    static constexpr std::array<unsigned int, 3> eatingFrameWidths_ = {
+        282, 282, 284};
+    static constexpr int sleepingFrameCount_ = 3;
+    static constexpr int sleepingFrameHeight_ = 768;
+    static constexpr float sleepingFrameTime_ = 0.45f;
+    static constexpr std::array<unsigned int, 3> sleepingFrameWidths_ = {
+        469, 469, 470};
+    static constexpr int awakeningFrameCount_ = 3;
+    static constexpr int awakeningFrameHeight_ = 768;
+    static constexpr float awakeningFrameTime_ = 0.45f;
+    static constexpr std::array<unsigned int, 3> awakeningFrameWidths_ = {
+        469, 469, 470};
+
+    std::array<sf::Texture, 6> birthTextures_;
+    std::array<sf::Texture, 5> normalFrames_;
+    std::array<sf::Texture, 3> eatingFrames_;
+    std::array<sf::Texture, 3> sleepingFrames_;
+    std::array<sf::Texture, 3> awakeningFrames_;
+    sf::Sprite sprite_;
+    std::size_t currentBirthFrame_ = 0;
+    int currentNormalFrame_ = 0;
+    float normalAnimationTime_ = 0.0f;
+    float eatingAnimationTime_ = 0.0f;
+    int currentEatingFrame_ = 0;
+    float sleepingAnimationTime_ = 0.0f;
+    int currentSleepingFrame_ = 0;
+    float awakeningAnimationTime_ = 0.0f;
+    int currentAwakeningFrame_ = 0;
+    bool loaded_ = true;
+    bool normalLoaded_ = false;
+    bool eatingLoaded_ = false;
+    bool sleepingLoaded_ = false;
+    bool awakeningLoaded_ = false;
+};
