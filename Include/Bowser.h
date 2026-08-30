@@ -95,6 +95,25 @@ public:
                 sourceX += awakeningFrameWidths_[index];
             }
         }
+
+        sf::Image deathSheet;
+        deathLoaded_ = deathSheet.loadFromFile("Images/Morir/Muerte.png");
+        if (deathLoaded_)
+        {
+            unsigned int sourceX = 0;
+            for (std::size_t index = 0; index < deathFrames_.size(); ++index)
+            {
+                sf::Image frame;
+                frame.create(deathFrameWidths_[index], deathFrameHeight_,
+                             sf::Color::Transparent);
+                frame.copy(deathSheet, 0, 0,
+                           sf::IntRect(sourceX, 0, deathFrameWidths_[index],
+                                       deathFrameHeight_), true);
+                deathLoaded_ = deathFrames_[index].loadFromImage(frame) &&
+                               deathLoaded_;
+                sourceX += deathFrameWidths_[index];
+            }
+        }
     }
 
     bool isLoaded() const
@@ -139,6 +158,11 @@ public:
     bool awakeningIsLoaded() const
     {
         return awakeningLoaded_;
+    }
+
+    bool deathIsLoaded() const
+    {
+        return deathLoaded_;
     }
 
     void startNormalAnimation(const sf::Vector2f& position)
@@ -267,6 +291,40 @@ public:
         return true;
     }
 
+    void startDeathAnimation()
+    {
+        if (deathLoaded_)
+        {
+            currentDeathFrame_ = 0;
+            deathAnimationTime_ = 0.0f;
+            setDeathFrame(0, sprite_.getPosition());
+        }
+    }
+
+    bool updateDeathAnimation(float deltaTime)
+    {
+        if (!deathLoaded_)
+        {
+            return true;
+        }
+
+        deathAnimationTime_ += deltaTime;
+        if (deathAnimationTime_ < deathFrameTime_)
+        {
+            return false;
+        }
+
+        deathAnimationTime_ = 0.0f;
+        if (currentDeathFrame_ < deathFrameCount_ - 1)
+        {
+            ++currentDeathFrame_;
+            setDeathFrame(currentDeathFrame_, sprite_.getPosition());
+            return false;
+        }
+
+        return true;
+    }
+
     void draw(sf::RenderWindow& window) const
     {
         if (loaded_)
@@ -322,6 +380,15 @@ private:
         sprite_.setPosition(position);
     }
 
+    void setDeathFrame(std::size_t frame, const sf::Vector2f& position)
+    {
+        sprite_.setTexture(deathFrames_[frame], true);
+        sprite_.setScale(0.32f, 0.32f);
+        sprite_.setOrigin(
+            deathFrameWidths_[frame] / 2.0f, deathFrameHeight_ / 2.0f);
+        sprite_.setPosition(position);
+    }
+
     static constexpr std::array<const char*, 6> birthImagePaths_ = {
         "Images/Nacer/Nacer 1.png",
         "Images/Nacer/Nacer 2.png",
@@ -349,12 +416,18 @@ private:
     static constexpr float awakeningFrameTime_ = 0.45f;
     static constexpr std::array<unsigned int, 3> awakeningFrameWidths_ = {
         469, 469, 470};
+    static constexpr int deathFrameCount_ = 3;
+    static constexpr int deathFrameHeight_ = 358;
+    static constexpr float deathFrameTime_ = 0.45f;
+    static constexpr std::array<unsigned int, 3> deathFrameWidths_ = {
+        446, 445, 445};
 
     std::array<sf::Texture, 6> birthTextures_;
     std::array<sf::Texture, 5> normalFrames_;
     std::array<sf::Texture, 3> eatingFrames_;
     std::array<sf::Texture, 3> sleepingFrames_;
     std::array<sf::Texture, 3> awakeningFrames_;
+    std::array<sf::Texture, 3> deathFrames_;
     sf::Sprite sprite_;
     std::size_t currentBirthFrame_ = 0;
     int currentNormalFrame_ = 0;
@@ -365,9 +438,12 @@ private:
     int currentSleepingFrame_ = 0;
     float awakeningAnimationTime_ = 0.0f;
     int currentAwakeningFrame_ = 0;
+    float deathAnimationTime_ = 0.0f;
+    int currentDeathFrame_ = 0;
     bool loaded_ = true;
     bool normalLoaded_ = false;
     bool eatingLoaded_ = false;
     bool sleepingLoaded_ = false;
     bool awakeningLoaded_ = false;
+    bool deathLoaded_ = false;
 };

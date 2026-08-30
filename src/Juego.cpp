@@ -29,7 +29,8 @@ int main()
         return 1;
     }
     if (!bowser.normalIsLoaded() || !bowser.eatingIsLoaded() ||
-        !bowser.sleepingIsLoaded() || !bowser.awakeningIsLoaded())
+        !bowser.sleepingIsLoaded() || !bowser.awakeningIsLoaded() ||
+        !bowser.deathIsLoaded())
     {
         std::cerr << "No se pudieron cargar las animaciones de Bowser.\n";
         return 1;
@@ -54,21 +55,26 @@ int main()
     }
     sf::Text lifeLabel("Vida", font, 24);
     sf::Text lifePercentage("100%", font, 20);
+    sf::Text gameOverText("GAME OVER", font, 64);
     lifeLabel.setPosition(25.0f, 35.0f);
     lifePercentage.setPosition(210.0f, 70.0f);
+    gameOverText.setPosition(360.0f, 70.0f);
     lifeLabel.setFillColor(sf::Color::White);
     lifePercentage.setFillColor(sf::Color::White);
+    gameOverText.setFillColor(sf::Color(220, 60, 60));
 
     bool birthScreen = true;
     bool recovering = false;
     bool sleeping = false;
     bool frozen = false;
     bool awakening = false;
+    bool dying = false;
     bool dead = false;
     float sleepKeyTime = 0.0f;
     std::size_t selectedOption = 0;
     float life = maximumLife;
     sf::Clock clock;
+    sf::Clock gameOverClock;
     while (window.isOpen())
     {
         sf::Event event;
@@ -91,29 +97,29 @@ int main()
             }
             else if (event.type == sf::Event::KeyPressed && !birthScreen)
             {
-                if (!dead && frozen && event.key.code == sf::Keyboard::Num3)
+                if (!dead && !dying && frozen && event.key.code == sf::Keyboard::Num3)
                 {
                     frozen = false;
                     awakening = true;
                     bowser.startAwakeningAnimation();
                 }
-                else if (!dead && !frozen && event.key.code == sf::Keyboard::Up)
+                else if (!dead && !dying && !frozen && event.key.code == sf::Keyboard::Up)
                 {
                     selectedOption = (selectedOption + menuOptions.size() - 1) %
                                      menuOptions.size();
                 }
-                else if (!dead && !frozen && event.key.code == sf::Keyboard::Down)
+                else if (!dead && !dying && !frozen && event.key.code == sf::Keyboard::Down)
                 {
                     selectedOption = (selectedOption + 1) % menuOptions.size();
                 }
-                else if (!dead && !frozen && event.key.code == sf::Keyboard::Num1 &&
+                else if (!dead && !dying && !frozen && event.key.code == sf::Keyboard::Num1 &&
                          !recovering && !awakening)
                 {
                     recovering = true;
                     sleeping = false;
                     bowser.startEatingAnimation();
                 }
-                else if (!dead && !frozen && event.key.code == sf::Keyboard::Num2 &&
+                else if (!dead && !dying && !frozen && event.key.code == sf::Keyboard::Num2 &&
                          !recovering && !awakening)
                 {
                     recovering = true;
@@ -121,7 +127,7 @@ int main()
                     sleepKeyTime = 0.0f;
                     bowser.startSleepingAnimation();
                 }
-                else if (!dead && !frozen && event.key.code == sf::Keyboard::Enter &&
+                else if (!dead && !dying && !frozen && event.key.code == sf::Keyboard::Enter &&
                          selectedOption < 2 && !recovering)
                 {
                     recovering = true;
@@ -142,7 +148,15 @@ int main()
         const float deltaTime = clock.restart().asSeconds();
         if (!birthScreen)
         {
-            if (awakening)
+            if (dying)
+            {
+                if (bowser.updateDeathAnimation(deltaTime))
+                {
+                    dying = false;
+                    dead = true;
+                }
+            }
+            else if (awakening)
             {
                 if (bowser.updateAwakeningAnimation(deltaTime))
                 {
@@ -196,10 +210,12 @@ int main()
                 life = std::max(0.0f, life - lifeLossPerSecond * deltaTime);
                 if (life <= 0.0f)
                 {
-                    dead = true;
+                    dying = true;
                     recovering = false;
                     sleeping = false;
                     frozen = false;
+                    bowser.startDeathAnimation();
+                    gameOverClock.restart();
                 }
                 else
                 {
@@ -243,6 +259,18 @@ int main()
             {
                 window.draw(lifeLabel);
                 window.draw(lifePercentage);
+            }
+
+            if ((dying || dead) && fontLoaded)
+            {
+                window.draw(gameOverText);
+            }
+        }
+        if (dying || dead)
+        {
+            if (gameOverClock.getElapsedTime().asSeconds() >= 3.0f)
+            {
+                window.close();
             }
         }
         bowser.draw(window);
