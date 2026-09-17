@@ -2,6 +2,8 @@
 
 #include <SFML/Graphics.hpp>
 #include <array>
+#include <queue>
+#include <vector>
 
 class Bowser
 {
@@ -10,8 +12,9 @@ public:
     {
         for (std::size_t index = 0; index < birthTextures_.size(); ++index)
         {
-            loaded_ = birthTextures_[index].loadFromFile(
-                birthImagePaths_[index]) && loaded_;
+            loaded_ = loadTextureWithoutWhiteBackground(
+                          birthTextures_[index], birthImagePaths_[index]) &&
+                      loaded_;
         }
 
         if (loaded_)
@@ -24,6 +27,7 @@ public:
             "Images/Estado Normal/Estado Normal.png");
         if (normalLoaded_)
         {
+            makeWhiteBackgroundTransparent(normalSheet);
             unsigned int sourceX = 0;
             for (std::size_t index = 0; index < normalFrames_.size(); ++index)
             {
@@ -41,6 +45,7 @@ public:
             "Images/Comiendo/Comiendo.png");
         if (eatingLoaded_)
         {
+            makeWhiteBackgroundTransparent(eatingSheet);
             unsigned int sourceX = 0;
             for (std::size_t index = 0; index < eatingFrames_.size(); ++index)
             {
@@ -61,6 +66,7 @@ public:
             "Images/Dormir/Dormido.png");
         if (sleepingLoaded_)
         {
+            makeWhiteBackgroundTransparent(sleepingSheet);
             unsigned int sourceX = 0;
             for (std::size_t index = 0; index < sleepingFrames_.size(); ++index)
             {
@@ -81,6 +87,7 @@ public:
             "Images/Despertar/Despertar.png");
         if (awakeningLoaded_)
         {
+            makeWhiteBackgroundTransparent(awakeningSheet);
             unsigned int sourceX = 0;
             for (std::size_t index = 0; index < awakeningFrames_.size(); ++index)
             {
@@ -100,6 +107,7 @@ public:
         deathLoaded_ = deathSheet.loadFromFile("Images/Morir/Muerte.png");
         if (deathLoaded_)
         {
+            makeWhiteBackgroundTransparent(deathSheet);
             unsigned int sourceX = 0;
             for (std::size_t index = 0; index < deathFrames_.size(); ++index)
             {
@@ -175,6 +183,15 @@ public:
         currentNormalFrame_ = 0;
         normalAnimationTime_ = 0.0f;
         setNormalFrame(0, position);
+    }
+
+    void setNormalAnimationScale(float scale)
+    {
+        normalScale_ = scale;
+        if (normalLoaded_)
+        {
+            setNormalFrame(currentNormalFrame_, sprite_.getPosition());
+        }
     }
 
     void updateNormalAnimation(float deltaTime)
@@ -333,7 +350,93 @@ public:
         }
     }
 
+    sf::Vector2f getPosition() const
+    {
+        return sprite_.getPosition();
+    }
+
+    void setPosition(const sf::Vector2f& position)
+    {
+        sprite_.setPosition(position);
+    }
+
 private:
+    static bool isWhiteBackgroundPixel(const sf::Color& color)
+    {
+        return color.r >= 245 && color.g >= 245 && color.b >= 245;
+    }
+
+    static void makeWhiteBackgroundTransparent(sf::Image& image)
+    {
+        const sf::Vector2u size = image.getSize();
+        if (size.x == 0 || size.y == 0)
+        {
+            return;
+        }
+
+        std::queue<sf::Vector2u> pixelsToVisit;
+        std::vector<bool> visited(size.x * size.y, false);
+        const auto addIfBackground = [&](unsigned int x, unsigned int y) {
+            const std::size_t index = y * size.x + x;
+            if (!visited[index] &&
+                isWhiteBackgroundPixel(image.getPixel(x, y)))
+            {
+                visited[index] = true;
+                pixelsToVisit.push(sf::Vector2u(x, y));
+            }
+        };
+
+        for (unsigned int x = 0; x < size.x; ++x)
+        {
+            addIfBackground(x, 0);
+            addIfBackground(x, size.y - 1);
+        }
+        for (unsigned int y = 1; y + 1 < size.y; ++y)
+        {
+            addIfBackground(0, y);
+            addIfBackground(size.x - 1, y);
+        }
+
+        while (!pixelsToVisit.empty())
+        {
+            const sf::Vector2u pixel = pixelsToVisit.front();
+            pixelsToVisit.pop();
+            const sf::Color color = image.getPixel(pixel.x, pixel.y);
+            image.setPixel(pixel.x, pixel.y,
+                           sf::Color(color.r, color.g, color.b, 0));
+
+            if (pixel.x > 0)
+            {
+                addIfBackground(pixel.x - 1, pixel.y);
+            }
+            if (pixel.x + 1 < size.x)
+            {
+                addIfBackground(pixel.x + 1, pixel.y);
+            }
+            if (pixel.y > 0)
+            {
+                addIfBackground(pixel.x, pixel.y - 1);
+            }
+            if (pixel.y + 1 < size.y)
+            {
+                addIfBackground(pixel.x, pixel.y + 1);
+            }
+        }
+    }
+
+    static bool loadTextureWithoutWhiteBackground(sf::Texture& texture,
+                                                   const char* path)
+    {
+        sf::Image image;
+        if (!image.loadFromFile(path))
+        {
+            return false;
+        }
+
+        makeWhiteBackgroundTransparent(image);
+        return texture.loadFromImage(image);
+    }
+
     void setBirthFrame(std::size_t frame, const sf::Vector2f& position)
     {
         sprite_.setTexture(birthTextures_[frame], true);
@@ -347,7 +450,7 @@ private:
     void setNormalFrame(std::size_t frame, const sf::Vector2f& position)
     {
         sprite_.setTexture(normalFrames_[frame], true);
-        sprite_.setScale(0.45f, 0.45f);
+        sprite_.setScale(normalScale_, normalScale_);
         sprite_.setOrigin(
             normalFrameWidths_[frame] / 2.0f, frameHeight_ / 2.0f);
         sprite_.setPosition(position);
@@ -432,6 +535,7 @@ private:
     std::size_t currentBirthFrame_ = 0;
     int currentNormalFrame_ = 0;
     float normalAnimationTime_ = 0.0f;
+    float normalScale_ = 0.45f;
     float eatingAnimationTime_ = 0.0f;
     int currentEatingFrame_ = 0;
     float sleepingAnimationTime_ = 0.0f;
