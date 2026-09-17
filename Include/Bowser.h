@@ -194,6 +194,15 @@ public:
         }
     }
 
+    void faceLeft(bool faceLeft)
+    {
+        facingLeft_ = faceLeft;
+        if (normalLoaded_)
+        {
+            setNormalFrame(currentNormalFrame_, sprite_.getPosition());
+        }
+    }
+
     void updateNormalAnimation(float deltaTime)
     {
         if (!normalLoaded_)
@@ -361,9 +370,13 @@ public:
     }
 
 private:
-    static bool isWhiteBackgroundPixel(const sf::Color& color)
+    static bool isBackgroundPixel(const sf::Color& color)
     {
-        return color.r >= 245 && color.g >= 245 && color.b >= 245;
+        const unsigned int brightest =
+            std::max({color.r, color.g, color.b});
+        const unsigned int darkest =
+            std::min({color.r, color.g, color.b});
+        return brightest - darkest <= 18 && brightest >= 125;
     }
 
     static void makeWhiteBackgroundTransparent(sf::Image& image)
@@ -379,7 +392,7 @@ private:
         const auto addIfBackground = [&](unsigned int x, unsigned int y) {
             const std::size_t index = y * size.x + x;
             if (!visited[index] &&
-                isWhiteBackgroundPixel(image.getPixel(x, y)))
+                isBackgroundPixel(image.getPixel(x, y)))
             {
                 visited[index] = true;
                 pixelsToVisit.push(sf::Vector2u(x, y));
@@ -450,7 +463,8 @@ private:
     void setNormalFrame(std::size_t frame, const sf::Vector2f& position)
     {
         sprite_.setTexture(normalFrames_[frame], true);
-        sprite_.setScale(normalScale_, normalScale_);
+        sprite_.setScale(facingLeft_ ? -normalScale_ : normalScale_,
+                         normalScale_);
         sprite_.setOrigin(
             normalFrameWidths_[frame] / 2.0f, frameHeight_ / 2.0f);
         sprite_.setPosition(position);
@@ -536,6 +550,7 @@ private:
     int currentNormalFrame_ = 0;
     float normalAnimationTime_ = 0.0f;
     float normalScale_ = 0.45f;
+    bool facingLeft_ = false;
     float eatingAnimationTime_ = 0.0f;
     int currentEatingFrame_ = 0;
     float sleepingAnimationTime_ = 0.0f;

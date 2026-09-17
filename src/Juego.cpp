@@ -45,6 +45,15 @@ struct MapObstacle
     GridPosition cell;
 };
 
+struct Mushroom
+{
+    sf::Texture texture;
+    sf::Sprite sprite;
+    GridPosition cell;
+    bool active = false;
+    float timeRemaining = 0.0f;
+};
+
 const std::array<std::string, mapRows>& getCollisionMap()
 {
     static const std::array<std::string, mapRows> collisionMap = {
@@ -168,8 +177,12 @@ sf::Vector2f gridToWorld(const GridPosition& position)
 GridPosition worldToGrid(const sf::Vector2f& position)
 {
     return {
-        static_cast<int>(position.x / tileSize),
-        static_cast<int>(position.y / tileSize)};
+        std::clamp(static_cast<int>(std::lround(
+                        (position.x - tileSize / 2.0f) / tileSize)),
+                   0, mapColumns - 1),
+        std::clamp(static_cast<int>(std::lround(
+                        (position.y - tileSize / 2.0f) / tileSize)),
+                   0, mapRows - 1)};
 }
 
 int main()
@@ -212,6 +225,18 @@ int main()
     mapBackground.setScale(
         static_cast<float>(windowWidth) / mapImageSize.x,
         static_cast<float>(windowHeight) / mapImageSize.y);
+
+    sf::Texture menuBackgroundTexture;
+    if (!menuBackgroundTexture.loadFromFile("Images/FondoMenu.png"))
+    {
+        std::cerr << "No se pudo cargar Images/FondoMenu.png.\n";
+        return 1;
+    }
+    sf::Sprite menuBackground(menuBackgroundTexture);
+    const sf::Vector2u menuImageSize = menuBackgroundTexture.getSize();
+    menuBackground.setScale(
+        static_cast<float>(windowWidth) / menuImageSize.x,
+        static_cast<float>(windowHeight) / menuImageSize.y);
 
     sf::Music mapMusic;
     const bool mapMusicLoaded = mapMusic.openFromFile("Docs/Musica/Musica.mp3");
@@ -278,9 +303,52 @@ int main()
     };
     placeObstacles();
 
+    Mushroom mushroom;
+    if (!mushroom.texture.loadFromFile("Images/Comida/Hongo.png"))
+    {
+        std::cerr << "No se pudo cargar Images/Comida/Hongo.png.\n";
+        return 1;
+    }
+    mushroom.sprite.setTexture(mushroom.texture);
+    const sf::Vector2u mushroomSize = mushroom.texture.getSize();
+    const float mushroomScale = std::min(
+        (tileSize - 4.0f) / mushroomSize.x,
+        (tileSize - 4.0f) / mushroomSize.y);
+    mushroom.sprite.setScale(mushroomScale, mushroomScale);
+    mushroom.sprite.setOrigin(mushroomSize.x / 2.0f,
+                              mushroomSize.y / 2.0f);
+
+    const auto placeMushroom = [&]()
+    {
+        GridPosition cell;
+        do
+        {
+            cell = {randomColumn(randomGenerator), randomRow(randomGenerator)};
+        } while (!isWalkable(cell, blocked) ||
+                 (cell.column == bowserStart.column &&
+                  cell.row == bowserStart.row) ||
+                 (mushroom.active && cell.column == mushroom.cell.column &&
+                  cell.row == mushroom.cell.row));
+
+        mushroom.cell = cell;
+        mushroom.active = true;
+        mushroom.timeRemaining = 8.0f;
+        mushroom.sprite.setPosition(gridToWorld(cell));
+    };
+    placeMushroom();
+
     sf::Font font;
     const bool fontLoaded = font.loadFromFile(
         "/System/Library/Fonts/Supplemental/Arial.ttf");
+    sf::Font bowserFont;
+    sf::Font menuFont;
+    sf::Font gameOverFont;
+    const bool bowserFontLoaded = bowserFont.loadFromFile(
+        "Asset/fonts/SuperMario256.ttf");
+    const bool menuFontLoaded = menuFont.loadFromFile(
+        "Asset/fonts/Crunchy Time.ttf");
+    const bool gameOverFontLoaded = gameOverFont.loadFromFile(
+        "Asset/fonts/Crushed.ttf");
     std::array<sf::Text, 5> menuOptions;
     const std::array<const char*, 5> optionNames = {
         "Comenzar juego (Enter)", "Comer", "Dormir", "Despertar", "Morir"};
@@ -290,23 +358,29 @@ int main()
         menuOptions[index].setCharacterSize(28);
         menuOptions[index].setFillColor(sf::Color::White);
         menuOptions[index].setPosition(50.0f, 130.0f + index * 55.0f);
-        if (fontLoaded)
+        if (menuFontLoaded || fontLoaded)
         {
-            menuOptions[index].setFont(font);
+            menuOptions[index].setFont(menuFontLoaded ? menuFont : font);
         }
     }
-    sf::Text lifeLabel("Vida", font, 24);
+    sf::Text lifeLabel(
+        "Vida", menuFontLoaded ? menuFont : font, 24);
     sf::Text lifePercentage("100%", font, 20);
-    sf::Text gameOverText("GAME OVER", font, 64);
+    sf::Text gameOverText(
+        "GAME OVER", gameOverFontLoaded ? gameOverFont : font, 64);
     lifeLabel.setPosition(25.0f, 35.0f);
     lifePercentage.setPosition(210.0f, 70.0f);
-    gameOverText.setPosition(360.0f, 70.0f);
+    const sf::FloatRect menuGameOverBounds = gameOverText.getLocalBounds();
+    gameOverText.setPosition(
+        540.0f - menuGameOverBounds.width / 2.0f,
+        70.0f - menuGameOverBounds.top);
     lifeLabel.setFillColor(sf::Color::White);
     lifePercentage.setFillColor(sf::Color::White);
     gameOverText.setFillColor(sf::Color(220, 60, 60));
 
     bool birthScreen = true;
     bool mapScreen = false;
+    bool mapGameOver = false;
     bool recovering = false;
     bool sleeping = false;
     bool frozen = false;
@@ -323,6 +397,30 @@ int main()
     float routePreviewTime = 0.0f;
     sf::Clock clock;
     sf::Clock gameOverClock;
+    const auto returnToMainMenu = [&]()
+    {
+        mapScreen = false;
+        mapGameOver = false;
+        life = maximumLife;
+        selectedOption = 0;
+        recovering = false;
+        sleeping = false;
+        frozen = false;
+        awakening = false;
+        dying = false;
+        dead = false;
+        if (mapMusicLoaded && mapMusic.getStatus() != sf::Music::Playing)
+        {
+            mapMusic.play();
+        }
+        mushroom.active = false;
+        path.clear();
+        pathIndex = 0;
+        routePreviewTime = 0.0f;
+        bowser.setNormalAnimationScale(0.45f);
+        bowser.startNormalAnimation(
+            sf::Vector2f(normalAnimationX, windowHeight / 2.0f));
+    };
     while (window.isOpen())
     {
         sf::Event event;
@@ -339,20 +437,21 @@ int main()
                 if (bowser.birthIsComplete())
                 {
                     birthScreen = false;
+                    if (mapMusicLoaded &&
+                        mapMusic.getStatus() != sf::Music::Playing)
+                    {
+                        mapMusic.play();
+                    }
                     bowser.startNormalAnimation(
                         sf::Vector2f(normalAnimationX, windowHeight / 2.0f));
                 }
             }
             else if (event.type == sf::Event::KeyPressed && !birthScreen && mapScreen)
             {
-                if (event.key.code == sf::Keyboard::Escape)
+                if (event.key.code == sf::Keyboard::Escape ||
+                    (mapGameOver && event.key.code == sf::Keyboard::Enter))
                 {
-                    mapScreen = false;
-                    mapMusic.stop();
-                    path.clear();
-                    bowser.setNormalAnimationScale(0.45f);
-                    bowser.startNormalAnimation(
-                        sf::Vector2f(normalAnimationX, windowHeight / 2.0f));
+                    returnToMainMenu();
                 }
             }
             else if (event.type == sf::Event::MouseButtonPressed &&
@@ -362,7 +461,9 @@ int main()
                 const GridPosition goal = worldToGrid(sf::Vector2f(
                     static_cast<float>(event.mouseButton.x),
                     static_cast<float>(event.mouseButton.y)));
-                path = findPath(worldToGrid(bowser.getPosition()), goal, blocked);
+                const GridPosition currentCell =
+                    worldToGrid(bowser.getPosition());
+                path = findPath(currentCell, goal, blocked);
                 pathIndex = path.size() > 1 ? 1 : path.size();
                 routePreviewTime = path.empty() ? 0.0f : routePreviewDuration;
             }
@@ -402,11 +503,10 @@ int main()
                          selectedOption == 0 && !recovering)
                 {
                     mapScreen = true;
-                    if (mapMusicLoaded)
-                    {
-                        mapMusic.play();
-                    }
+                    mapGameOver = false;
+                    life = maximumLife;
                     placeObstacles();
+                    placeMushroom();
                     path.clear();
                     routePreviewTime = 0.0f;
                     bowser.setPosition(gridToWorld(bowserStart));
@@ -432,9 +532,40 @@ int main()
         }
 
         const float deltaTime = clock.restart().asSeconds();
-        if (mapScreen)
+        if (mapScreen && !mapGameOver)
         {
             bowser.updateNormalAnimation(deltaTime);
+            life = std::max(0.0f, life - lifeLossPerSecond * deltaTime);
+
+            if (mushroom.active)
+            {
+                mushroom.timeRemaining -= deltaTime;
+                if (mushroom.timeRemaining <= 0.0f)
+                {
+                    placeMushroom();
+                }
+            }
+
+            const sf::Vector2f mushroomPosition = gridToWorld(mushroom.cell);
+            const sf::Vector2f bowserPosition = bowser.getPosition();
+            const sf::Vector2f mushroomDifference = bowserPosition -
+                                                     mushroomPosition;
+            const float mushroomDistanceSquared =
+                mushroomDifference.x * mushroomDifference.x +
+                mushroomDifference.y * mushroomDifference.y;
+            if (mushroom.active && mushroomDistanceSquared <= 1.0f)
+            {
+                life = maximumLife;
+                placeMushroom();
+            }
+
+            if (life <= 0.0f)
+            {
+                mapGameOver = true;
+                path.clear();
+                routePreviewTime = 0.0f;
+            }
+
             if (routePreviewTime > 0.0f)
             {
                 routePreviewTime = std::max(0.0f,
@@ -450,11 +581,19 @@ int main()
                 const float step = movementSpeed * deltaTime;
                 if (distance <= step)
                 {
+                    if (std::abs(difference.x) > 0.01f)
+                    {
+                        bowser.faceLeft(difference.x < 0.0f);
+                    }
                     bowser.setPosition(targetPosition);
                     ++pathIndex;
                 }
                 else if (distance > 0.0f)
                 {
+                    if (std::abs(difference.x) > 0.01f)
+                    {
+                        bowser.faceLeft(difference.x < 0.0f);
+                    }
                     bowser.setPosition(currentPosition +
                                        difference * (step / distance));
                 }
@@ -542,7 +681,7 @@ int main()
             }
         }
 
-        window.clear(birthScreen ? sf::Color(40, 120, 70) : sf::Color(28, 35, 48));
+        window.clear(sf::Color::Black);
         if (mapScreen)
         {
             window.draw(mapBackground);
@@ -554,7 +693,11 @@ int main()
                 routeTile.setFillColor(sf::Color(220, 30, 30, 90));
                 routeTile.setOutlineColor(sf::Color::Red);
                 routeTile.setOutlineThickness(3.0f);
-                for (std::size_t index = pathIndex; index < path.size(); ++index)
+                 const std::size_t firstPendingStep = routePreviewTime > 0.0f
+                                                  ? 0
+                                                  : pathIndex;
+                 for (std::size_t index = firstPendingStep;
+                     index < path.size(); ++index)
                 {
                     const sf::Vector2f center = gridToWorld(path[index]);
                     routeTile.setPosition(
@@ -569,7 +712,13 @@ int main()
                 window.draw(obstacle.sprite);
             }
 
-            sf::Text mapTitle("Mapa de juego", font, 28);
+            if (mushroom.active)
+            {
+                window.draw(mushroom.sprite);
+            }
+
+            sf::Text mapTitle(
+                "Mapa de juego", menuFontLoaded ? menuFont : font, 28);
             mapTitle.setPosition(20.0f, 15.0f);
             mapTitle.setFillColor(sf::Color(255, 245, 210));
             mapTitle.setOutlineThickness(2.0f);
@@ -577,6 +726,73 @@ int main()
             if (fontLoaded)
             {
                 window.draw(mapTitle);
+            }
+
+            sf::Text mapLifeLabel(
+                "Vida", menuFontLoaded ? menuFont : font, 18);
+            mapLifeLabel.setPosition(20.0f, 48.0f);
+            mapLifeLabel.setFillColor(sf::Color(255, 245, 210));
+            mapLifeLabel.setOutlineThickness(2.0f);
+            mapLifeLabel.setOutlineColor(sf::Color(60, 25, 15));
+            window.draw(mapLifeLabel);
+
+            sf::RectangleShape mapLifeBackground(sf::Vector2f(220.0f, 18.0f));
+            mapLifeBackground.setPosition(75.0f, 50.0f);
+            mapLifeBackground.setFillColor(sf::Color(55, 25, 25, 220));
+            window.draw(mapLifeBackground);
+
+            sf::RectangleShape mapLifeBar(
+                sf::Vector2f(220.0f * life / maximumLife, 18.0f));
+            mapLifeBar.setPosition(75.0f, 50.0f);
+            mapLifeBar.setFillColor(life > 30.0f
+                                        ? sf::Color(70, 220, 90)
+                                        : sf::Color(220, 55, 45));
+            window.draw(mapLifeBar);
+
+            sf::Text mapLifePercentage(
+                std::to_string(static_cast<int>(std::round(life))) + "%",
+                font, 16);
+            mapLifePercentage.setPosition(165.0f, 48.0f);
+            mapLifePercentage.setFillColor(sf::Color::White);
+            mapLifePercentage.setOutlineThickness(1.0f);
+            mapLifePercentage.setOutlineColor(sf::Color::Black);
+            if (fontLoaded)
+            {
+                window.draw(mapLifePercentage);
+            }
+
+            if (mapGameOver && (fontLoaded || gameOverFontLoaded))
+            {
+                sf::RectangleShape gameOverPanel(
+                    sf::Vector2f(620.0f, 190.0f));
+                gameOverPanel.setPosition(90.0f, 190.0f);
+                gameOverPanel.setFillColor(sf::Color(20, 10, 10, 225));
+                gameOverPanel.setOutlineThickness(3.0f);
+                gameOverPanel.setOutlineColor(sf::Color(220, 55, 45));
+                window.draw(gameOverPanel);
+
+                sf::Text mapGameOverText("GAME OVER", font, 64);
+                if (gameOverFontLoaded)
+                {
+                    mapGameOverText.setFont(gameOverFont);
+                }
+                const sf::FloatRect gameOverBounds =
+                    mapGameOverText.getLocalBounds();
+                mapGameOverText.setPosition(
+                    400.0f - gameOverBounds.width / 2.0f,
+                    210.0f - gameOverBounds.top);
+                mapGameOverText.setFillColor(sf::Color(240, 65, 55));
+                window.draw(mapGameOverText);
+
+                sf::Text returnToMenuText(
+                    "Presiona ENTER para regresar al menu principal",
+                    menuFontLoaded ? menuFont : font, 22);
+                const sf::FloatRect returnBounds = returnToMenuText.getLocalBounds();
+                returnToMenuText.setPosition(
+                    400.0f - returnBounds.width / 2.0f,
+                    315.0f - returnBounds.top);
+                returnToMenuText.setFillColor(sf::Color::White);
+                window.draw(returnToMenuText);
             }
 
             sf::Text mapInstructions("ESC: volver al menu", font, 18);
@@ -591,15 +807,20 @@ int main()
         }
         else if (!birthScreen)
         {
-            sf::RectangleShape menuPanel(sf::Vector2f(280.0f, windowHeight));
-            menuPanel.setFillColor(sf::Color(20, 25, 35));
-            window.draw(menuPanel);
+            window.draw(menuBackground);
             for (std::size_t index = 0; index < menuOptions.size(); ++index)
             {
-                menuOptions[index].setFillColor(
-                    index == selectedOption ? sf::Color(255, 190, 60)
-                                             : sf::Color::White);
-                if (fontLoaded)
+                sf::RectangleShape optionPanel(sf::Vector2f(330.0f, 48.0f));
+                optionPanel.setPosition(25.0f, 120.0f + index * 55.0f);
+                optionPanel.setFillColor(sf::Color(0, 0, 0, 220));
+                optionPanel.setOutlineThickness(index == selectedOption ? 2.0f : 1.0f);
+                optionPanel.setOutlineColor(index == selectedOption
+                                                ? sf::Color(255, 190, 60)
+                                                : sf::Color(90, 90, 90));
+                window.draw(optionPanel);
+
+                menuOptions[index].setFillColor(sf::Color::White);
+                if (menuFontLoaded || fontLoaded)
                 {
                     window.draw(menuOptions[index]);
                 }
@@ -637,7 +858,27 @@ int main()
                 window.close();
             }
         }
-        bowser.draw(window);
+        if ((birthScreen || !mapScreen) && (fontLoaded || bowserFontLoaded))
+        {
+            sf::Text bowserTitle(
+                "Super Bowser", bowserFontLoaded ? bowserFont : font, 36);
+            const sf::FloatRect bowserTitleBounds = bowserTitle.getLocalBounds();
+            bowserTitle.setPosition(
+                540.0f - bowserTitleBounds.width / 2.0f,
+                95.0f - bowserTitleBounds.top);
+            if (birthScreen)
+            {
+                bowserTitle.setPosition(
+                    400.0f - bowserTitleBounds.width / 2.0f,
+                    35.0f - bowserTitleBounds.top);
+            }
+            bowserTitle.setFillColor(sf::Color(255, 190, 60));
+            window.draw(bowserTitle);
+        }
+        if (!mapScreen || !mapGameOver)
+        {
+            bowser.draw(window);
+        }
         window.display();
     }
 
